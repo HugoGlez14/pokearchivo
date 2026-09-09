@@ -1,0 +1,2 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box}body{margin:0;background:#f5f5f0;color:#242820;font:16px 'DM Sans',sans-serif}button{font:inherit;cursor:pointer}a{color:inherit}button:focus-visible,a:focus-visible{outline:3px solid #246144;outline-offset:4px}
