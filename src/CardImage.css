@@ -1,0 +1,23 @@
+.pokemon-card > img,
+.card-image-missing {
+  width: 100%;
+  display: block;
+  aspect-ratio: .715;
+  background: #e8ece1;
+}
+
+.pokemon-card > img {
+  object-fit: cover;
+}
+
+.card-image-missing {
+  display: grid;
+  place-items: center;
+  color: #6d7868;
+  text-align: center;
+}
+
+.card-image-missing span {
+  padding: 18px;
+  white-space: normal;
+}

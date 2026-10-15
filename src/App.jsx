@@ -4,6 +4,7 @@ import './Regions.css'
 import './Competitive.css'
 import './Decks.css'
 import './Polish.css'
+import './CardImage.css'
 
 const TCG = 'https://api.pokemontcg.io/v2/'
 const TCGDEX = '/api/tcgdex/'
@@ -27,6 +28,22 @@ const regionalFallback = region => { const ranges={kanto:[1,151],johto:[152,251]
 const pretty = (s) => s.replaceAll('-', ' ').replace(/\b\w/g, (l) => l.toUpperCase())
 const timeout = (promise, ms=6500) => Promise.race([promise, new Promise((_,reject)=>setTimeout(()=>reject(Error('timeout')),ms))])
 const getJson = (url) => timeout(fetch(url).then(r => r.ok ? r.json() : Promise.reject(Error(r.status))))
+const tcgdexImage = image => {
+  if (!image) return ''
+  if (/\.(?:avif|gif|jpe?g|png|webp)(?:\?.*)?$/i.test(image)) return image
+  return `${image.replace(/\/$/, '')}/low.webp`
+}
+
+function CardImage({ card }) {
+  const [failedSource, setFailedSource] = useState('')
+  const source = card.images?.small
+
+  if (!source || failedSource === source) {
+    return <div className="card-image-missing" role="img" aria-label={`Imagen no disponible para ${card.name}`}><span>Imagen no disponible</span></div>
+  }
+
+  return <img loading="lazy" src={source} alt={card.name} onError={() => setFailedSource(source)}/>
+}
 
 function useSets() {
   const [sets, setSets] = useState([])
@@ -59,7 +76,7 @@ function Cards({ sets, deck, add, initialSet='' }) {
         const localizedCards = set ? localized.cards : localized
         return (localizedCards || [])
           .filter(card => !query || card.name.toLowerCase().includes(query.toLowerCase()))
-          .map(card => ({ id:card.id, name:card.name, images:{ small:card.image }, set:{ name:localized.name || card.set?.name || 'Edición en español' }, supertype:'Carta TCG' }))
+          .map(card => ({ id:card.id, name:card.name, images:{ small:tcgdexImage(card.image) }, set:{ name:localized.name || card.set?.name || 'Edición en español' }, supertype:'Carta TCG' }))
       }
       const currentPage = set ? 1 : page
       const url = `${TCG}cards?page=${currentPage}&pageSize=${size}&select=id,name,images,set,supertype,hp${q ? `&q=${encodeURIComponent(q)}` : ''}`
@@ -89,7 +106,7 @@ function Cards({ sets, deck, add, initialSet='' }) {
     return () => controller.abort()
   }, [query, set, page, language, attempt])
   const copies = id => deck.filter(c => c.id === id).length
-  return <section><div className="toolbar"><label className="search">⌕<input value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}} placeholder={language==='es'?'Busca el nombre en español…':'Busca cartas por nombre…'}/></label><label className="select"><span>◈</span><small>EXPANSIÓN</small><select value={set} onChange={e=>{setSet(e.target.value);setPage(1)}}><option value="">Todas las expansiones</option>{sets.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><div className="language-switch" aria-label="Idioma de las cartas"><button className={language==='en'?'active':''} onClick={()=>setLanguage('en')}>EN</button><button className={language==='es'?'active':''} onClick={()=>setLanguage('es')}>ES</button></div></div>{state==='loading' ? <Loader label={set?'Cargando todas las cartas de la expansión…':'Buscando cartas…'}/> : <>{language==='es'&&!set&&!query&&<p className="result-line">Elige una expansión o busca una carta para consultar las ediciones en español.</p>}{state==='fallback'&&<p className="empty">La fuente externa no respondió. Mostramos una selección disponible mientras vuelve a estar activa.<button className="secondary retry" onClick={()=>setAttempt(value=>value+1)}>Reintentar carga</button></p>}{set&&state==='ready'&&<p className="result-line">{cards.length} cartas de esta expansión en una sola vista{language==='es'?' · Edición en español':''}</p>}{state==='ready'&&language==='es'&&(set||query)&&!cards.length&&<p className="empty">No encontramos una edición localizada para esta consulta. Prueba otra expansión o búsqueda.</p>}<div className="card-grid">{cards.map(c=><article className="pokemon-card" key={c.id}><img loading="lazy" src={c.images?.small} alt={c.name}/><div><small>{c.set?.name}</small><b>{c.name}</b><span>{c.supertype}{c.hp?` · ${c.hp} PS`:''}</span></div><button disabled={copies(c.id)>=4 || deck.length>=60} onClick={()=>add(c)}>{copies(c.id)?`Añadida ×${copies(c.id)}`:'＋ Añadir'}</button></article>)}</div>{!set&&language==='en'&&<div className="pagination"><button disabled={page===1} onClick={()=>setPage(p=>p-1)}>← Anterior</button><span>Página {page}</span><button disabled={state==='fallback'||cards.length<20} onClick={()=>setPage(p=>p+1)}>Siguiente →</button></div>}</>}</section>
+  return <section><div className="toolbar"><label className="search">⌕<input value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}} placeholder={language==='es'?'Busca el nombre en español…':'Busca cartas por nombre…'}/></label><label className="select"><span>◈</span><small>EXPANSIÓN</small><select value={set} onChange={e=>{setSet(e.target.value);setPage(1)}}><option value="">Todas las expansiones</option>{sets.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><div className="language-switch" aria-label="Idioma de las cartas"><button className={language==='en'?'active':''} onClick={()=>setLanguage('en')}>EN</button><button className={language==='es'?'active':''} onClick={()=>setLanguage('es')}>ES</button></div></div>{state==='loading' ? <Loader label={set?'Cargando todas las cartas de la expansión…':'Buscando cartas…'}/> : <>{language==='es'&&!set&&!query&&<p className="result-line">Elige una expansión o busca una carta para consultar las ediciones en español.</p>}{state==='fallback'&&<p className="empty">La fuente externa no respondió. Mostramos una selección disponible mientras vuelve a estar activa.<button className="secondary retry" onClick={()=>setAttempt(value=>value+1)}>Reintentar carga</button></p>}{set&&state==='ready'&&<p className="result-line">{cards.length} cartas de esta expansión en una sola vista{language==='es'?' · Edición en español':''}</p>}{state==='ready'&&language==='es'&&(set||query)&&!cards.length&&<p className="empty">No encontramos una edición localizada para esta consulta. Prueba otra expansión o búsqueda.</p>}<div className="card-grid">{cards.map(c=><article className="pokemon-card" key={c.id}><CardImage card={c}/><div><small>{c.set?.name}</small><b>{c.name}</b><span>{c.supertype}{c.hp?` · ${c.hp} PS`:''}</span></div><button disabled={copies(c.id)>=4 || deck.length>=60} onClick={()=>add(c)}>{copies(c.id)?`Añadida ×${copies(c.id)}`:'＋ Añadir'}</button></article>)}</div>{!set&&language==='en'&&<div className="pagination"><button disabled={page===1} onClick={()=>setPage(p=>p-1)}>← Anterior</button><span>Página {page}</span><button disabled={state==='fallback'||cards.length<20} onClick={()=>setPage(p=>p+1)}>Siguiente →</button></div>}</>}</section>
 }
 
 function Sets({ sets, notice, open, reload }) {
