@@ -6,9 +6,7 @@ import './Decks.css'
 import './Polish.css'
 import './CardImage.css'
 
-const TCG = 'https://api.pokemontcg.io/v2/'
-const TCGDEX = '/api/tcgdex/'
-const BACKUP = 'https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json'
+const TCGDEX = 'https://api.tcgdex.net/v2/'
 const REGIONS = ['kanto','johto','hoenn','sinnoh','unova','kalos','alola','galar','paldea']
 const META = [
   { name:'Grimmsnarl Froslass', share:10.39, win:52.69, list:['4 Grimmsnarl ex','3 Froslass','4 Marnie’s Morpeko','4 Buddy-Buddy Poffin','14 Energías'] },
@@ -33,6 +31,11 @@ const tcgdexImage = image => {
   if (/\.(?:avif|gif|jpe?g|png|webp)(?:\?.*)?$/i.test(image)) return image
   return `${image.replace(/\/$/, '')}/low.webp`
 }
+const tcgdexAsset = image => {
+  if (!image) return ''
+  if (/\.(?:avif|gif|jpe?g|png|webp)(?:\?.*)?$/i.test(image)) return image
+  return `${image}.webp`
+}
 
 function CardImage({ card }) {
   const [failedSource, setFailedSource] = useState('')
@@ -49,9 +52,15 @@ function useSets() {
   const [sets, setSets] = useState([])
   const [notice, setNotice] = useState('Cargando expansiones…')
   useEffect(() => {
-    getJson(`${TCG}sets?pageSize=250&orderBy=-releaseDate`).then(d => d.data)
-      .catch(() => getJson(BACKUP))
-      .then(d => { setSets([...d].sort((a,b) => (b.releaseDate||'').localeCompare(a.releaseDate||''))); setNotice('') })
+    getJson(`${TCGDEX}en/sets`)
+      .then(data => data.map(set => ({
+        ...set,
+        series: 'TCG',
+        total: set.cardCount?.total || 0,
+        releaseDate: '',
+        images: { logo:tcgdexAsset(set.logo), symbol:tcgdexAsset(set.symbol) },
+      })).reverse())
+      .then(data => { setSets(data); setNotice('') })
       .catch(() => { setSets(FALLBACK_SETS); setNotice('Mostrando catálogo local mientras la fuente externa vuelve a estar disponible.') })
   }, [])
   return { sets, notice }
@@ -63,37 +72,18 @@ function Cards({ sets, deck, add, initialSet='' }) {
   const [query, setQuery] = useState(''), [set, setSet] = useState(initialSet), [language,setLanguage] = useState('en')
   const [cards, setCards] = useState([]), [state, setState] = useState('loading'), [page, setPage] = useState(1), [attempt,setAttempt] = useState(0)
   useEffect(() => {
-    const q = [query && `name:${query}`, set && `set.id:${set}`].filter(Boolean).join(' ')
     setState('loading')
     const controller = new AbortController()
-    const size = set ? 250 : 20
     const load = async () => {
-      if (language === 'es') {
-        if (!set && !query.trim()) return []
-        const localizedSetId = set.replace(/^sv(\d)$/, 'sv0$1')
-        const localizedUrl = set ? `${TCGDEX}es/sets/${localizedSetId}` : `${TCGDEX}es/cards?name=${encodeURIComponent(query)}`
-        const localized = await timeout(fetch(localizedUrl, { signal: controller.signal }).then(r => r.ok ? r.json() : Promise.reject(Error(r.status))), 9000)
-        const localizedCards = set ? localized.cards : localized
-        return (localizedCards || [])
-          .filter(card => !query || card.name.toLowerCase().includes(query.toLowerCase()))
-          .map(card => ({ id:card.id, name:card.name, images:{ small:tcgdexImage(card.image) }, set:{ name:localized.name || card.set?.name || 'Edición en español' }, supertype:'Carta TCG' }))
-      }
-      const currentPage = set ? 1 : page
-      const url = `${TCG}cards?page=${currentPage}&pageSize=${size}&select=id,name,images,set,supertype,hp${q ? `&q=${encodeURIComponent(q)}` : ''}`
-      const first = await timeout(fetch(url, { signal: controller.signal }).then(r => r.ok ? r.json() : Promise.reject(Error(r.status))), 9000)
-      if (!set || first.count >= first.totalCount) return first.data
-      const allCards = [...first.data]
-      const totalPages = Math.ceil(first.totalCount / size)
-      for (let nextPage = 2; nextPage <= totalPages; nextPage += 1) {
-        try {
-          const next = url.replace(`page=${currentPage}`, `page=${nextPage}`)
-          const result = await timeout(fetch(next, { signal: controller.signal }).then(r => r.ok ? r.json() : Promise.reject(Error(r.status))), 9000)
-          allCards.push(...result.data)
-        } catch {
-          break
-        }
-      }
-      return allCards
+      if (!set && !query.trim()) return []
+      const localizedSetId = set.replace(/^sv(\d)$/, 'sv0$1')
+      const url = set ? `${TCGDEX}${language}/sets/${localizedSetId}` : `${TCGDEX}${language}/cards?name=${encodeURIComponent(query.trim())}`
+      const result = await timeout(fetch(url, { signal: controller.signal }).then(r => r.ok ? r.json() : Promise.reject(Error(r.status))), 9000)
+      const sourceCards = set ? result.cards : result
+      const normalizedCards = (sourceCards || [])
+        .filter(card => !query || card.name.toLowerCase().includes(query.toLowerCase()))
+        .map(card => ({ id:card.id, name:card.name, images:{ small:tcgdexImage(card.image) }, set:{ name:result.name || card.set?.name || (language === 'es' ? 'Edición en español' : 'Pokémon TCG') }, supertype:'Carta TCG' }))
+      return set ? normalizedCards : normalizedCards.slice((page - 1) * 20, page * 20)
     }
     load().then(data => {
       if (!controller.signal.aborted) { setCards(data); setState('ready') }
